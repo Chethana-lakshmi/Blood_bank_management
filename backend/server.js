@@ -48,11 +48,14 @@ app.use((req, _res, next) => {
 });
 
 // ─── Database Health Middleware for API routes ────────────────────────────────
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    await connectDB();
+  }
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({
       success: false,
-      message: 'MongoDB Atlas firewall blocked this connection. In MongoDB Atlas (cloud.mongodb.com), go to Network Access -> "+ Add IP Address" -> select "Allow Access From Anywhere" (0.0.0.0/0) and click Confirm.',
+      message: 'MongoDB Atlas is connecting or not reachable. Please ensure MONGODB_URI is set in environment variables and 0.0.0.0/0 is added in Atlas Network Access.',
     });
   }
   next();
@@ -91,12 +94,14 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 BloodConnect API server running on port ${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
-  console.log(`   API base URL: http://localhost:${PORT}/api`);
-});
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 BloodConnect API server running on port ${PORT}`);
+    console.log(`   Health check: http://localhost:${PORT}/health`);
+    console.log(`   API base URL: http://localhost:${PORT}/api`);
+  });
+}
 
 // ─── Graceful Error Handling ──────────────────────────────────────────────────
 process.on('unhandledRejection', (err) => {
