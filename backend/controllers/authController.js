@@ -4,11 +4,13 @@ const User = require('../models/User');
 const Donor = require('../models/Donor');
 const Hospital = require('../models/Hospital');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_bloodconnect_jwt_key_2026_production_ready';
+
 /**
  * Generate a signed JWT token for the given user id.
  */
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_secret', {
+  return jwt.sign({ id }, JWT_SECRET, {
     expiresIn: '7d',
   });
 };
