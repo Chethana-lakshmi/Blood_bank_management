@@ -1,66 +1,50 @@
 const mongoose = require('mongoose');
 
-let isConnected = false;
-let retryTimer = null;
+let isConnecting = false;
 
-const tryConnect = async (uri) => {
-  try {
-    const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000,
-    });
-    if (mongoose.connection.readyState === 1) {
-      isConnected = true;
-      if (retryTimer) {
-        clearInterval(retryTimer);
-        retryTimer = null;
-      }
-      console.log(`✅ MongoDB Connected (Atlas): ${conn.connection.host}/${conn.connection.name}`);
-      return true;
-    }
-  } catch (err) {
-    const isIpBlocked = err.message.includes('whitelist') || err.message.includes('alert internal error') || err.message.includes('alert number 80');
-    if (isIpBlocked) {
-      console.warn('🔒 Atlas Security: Your IP address is not whitelisted in MongoDB Atlas Network Access.');
-      console.warn('👉 Add IP 0.0.0.0/0 (or your current public IP) at: https://cloud.mongodb.com -> Network Access');
-    } else {
-      console.warn(`⚠️ MongoDB connection attempt failed: ${err.message}`);
-    }
-  }
-  return false;
-};
-
+/**
+ * Connect to MongoDB Atlas
+ */
 const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    console.warn('⚠️ MONGODB_URI is not set in backend/.env');
-    return;
+    console.error('❌ [MongoDB] MONGODB_URI environment variable is not defined.');
+    console.error('👉 Please set MONGODB_URI in backend/.env or your deployment environment variables.');
+    return null;
   }
 
   if (mongoose.connection.readyState === 1) {
-    isConnected = true;
-    return;
+    return mongoose.connection;
   }
 
-  const success = await tryConnect(uri);
-  if (success) return;
+  if (isConnecting) {
+    return null;
+  }
 
-  // Set up background retry if not already active
-  if (!retryTimer) {
-    console.log('🔄 Waiting for Atlas IP Whitelist (retrying every 5s)...');
-    retryTimer = setInterval(async () => {
-      if (mongoose.connection.readyState === 1) {
-        isConnected = true;
-        clearInterval(retryTimer);
-        retryTimer = null;
-        return;
-      }
-      await tryConnect(uri);
-    }, 5000);
+  isConnecting = true;
+  try {
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+    isConnecting = false;
+    console.log(`✅ [MongoDB] Connected successfully to Atlas: ${conn.connection.host}/${conn.connection.name}`);
+    return conn;
+  } catch (err) {
+    isConnecting = false;
+    console.error(`❌ [MongoDB] Connection error: ${err.message}`);
+    if (
+      err.message.includes('whitelist') ||
+      err.message.includes('alert internal error') ||
+      err.message.includes('alert number 80')
+    ) {
+      console.error('🔒 [MongoDB] IP not whitelisted in Atlas Network Access. Add 0.0.0.0/0 to allow connections.');
+    }
+    return null;
   }
 };
 
-const checkConnection = () => isConnected || mongoose.connection.readyState === 1;
+const isDBConnected = () => mongoose.connection.readyState === 1;
 
 module.exports = connectDB;
-module.exports.checkConnection = checkConnection;
+module.exports.isDBConnected = isDBConnected;
